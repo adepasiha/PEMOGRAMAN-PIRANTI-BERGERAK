@@ -1,8 +1,133 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../app.dart';
 import '../models/air_quality.dart';
 import '../models/city.dart';
+
+class CityMapCard extends StatelessWidget {
+  const CityMapCard({required this.city, required this.aqi, super.key});
+
+  final City city;
+  final int? aqi;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEBEFED)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Peta lokasi',
+            style: TextStyle(
+              color: inkColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'Lokasi pemantauan · ${city.name}, ${city.region}',
+            style: const TextStyle(color: mutedColor, fontSize: 10),
+          ),
+          const SizedBox(height: 11),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              height: 180,
+              child: FlutterMap(
+                options: MapOptions(
+                  initialCenter: LatLng(city.latitude, city.longitude),
+                  initialZoom: 12,
+                  minZoom: 4,
+                  maxZoom: 18,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.flutter_application_1',
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: LatLng(city.latitude, city.longitude),
+                        width: 170,
+                        height: 62,
+                        alignment: Alignment.bottomCenter,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x33000000),
+                                    blurRadius: 6,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                '${city.name} · ${aqi == null ? '—' : '$aqi AQI'}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: inkColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.location_on_rounded,
+                              color: greenColor,
+                              size: 31,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const RichAttributionWidget(
+                    alignment: AttributionAlignment.bottomRight,
+                    attributions: [
+                      TextSourceAttribution('© OpenStreetMap contributors'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.pan_tool_alt_rounded, size: 13, color: mutedColor),
+              SizedBox(width: 5),
+              Text(
+                'Geser atau cubit peta untuk menjelajah',
+                style: TextStyle(color: mutedColor, fontSize: 10),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class CityPicker extends StatelessWidget {
   const CityPicker({required this.city, required this.onChanged, super.key});

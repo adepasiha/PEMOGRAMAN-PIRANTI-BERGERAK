@@ -54,6 +54,18 @@ class AirQuality {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+    'current': {
+      'time': time?.toIso8601String(),
+      'us_aqi': usAqi,
+      'pm2_5': pm25,
+      'pm10': pm10,
+      'nitrogen_dioxide': nitrogenDioxide,
+      'ozone': ozone,
+    },
+    'hourly': {'us_aqi': hourlyAqi},
+  };
+
   static int? _toInt(Object? value) => value is num ? value.round() : null;
 
   static double? _toDouble(Object? value) =>

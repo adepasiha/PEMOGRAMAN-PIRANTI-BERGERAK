@@ -4,6 +4,7 @@ import '../app.dart';
 import '../models/air_quality.dart';
 import '../models/city.dart';
 import '../services/air_quality_api.dart';
+import '../services/air_quality_local_store.dart';
 import '../widgets/air_quality_widgets.dart';
 import 'analysis_page.dart';
 import 'about_page.dart';
@@ -19,17 +20,21 @@ class AirQualityHome extends StatefulWidget {
 
 class _AirQualityHomeState extends State<AirQualityHome> {
   late final AirQualityApi _api = widget.api ?? AirQualityApi();
+  final AirQualityLocalStore _localStore = AirQualityLocalStore();
   City _city = City.all.first;
   AirQuality? _air;
   String? _error;
+  String? _storageWarning;
+  DateTime? _cacheSavedAt;
   bool _isLoading = true;
+  bool _isCached = false;
   int _selectedTab = 0;
   int _requestId = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadAirQuality();
+    _initialize();
   }
 
   @override
@@ -38,22 +43,77 @@ class _AirQualityHomeState extends State<AirQualityHome> {
     super.dispose();
   }
 
+  Future<void> _initialize() async {
+    final startupRequestId = _requestId;
+    var initialCity = _city;
+
+    try {
+      initialCity = await _localStore.loadLastCity() ?? initialCity;
+    } on AirQualityLocalStoreException catch (error) {
+      _storageWarning = error.message;
+    }
+    if (!mounted || startupRequestId != _requestId) return;
+
+    setState(() => _city = initialCity);
+
+    CachedAirQuality? cached;
+    try {
+      cached = await _localStore.loadAirQualityForCity(initialCity);
+    } on AirQualityLocalStoreException catch (error) {
+      _storageWarning = error.message;
+    }
+    if (!mounted || startupRequestId != _requestId) return;
+
+    setState(() {
+      _air = cached?.airQuality;
+      _cacheSavedAt = cached?.savedAt;
+      _isCached = cached != null;
+      _isLoading = cached == null;
+    });
+    await _loadAirQuality(showLoading: cached == null);
+  }
+
   Future<void> _loadAirQuality({bool showLoading = true}) async {
     final requestId = ++_requestId;
+    final city = _city;
     if (showLoading && mounted) {
       setState(() {
         _isLoading = true;
         _error = null;
       });
     }
+
+    var citySaved = false;
     try {
-      final air = await _api.fetch(_city);
+      await _localStore.saveLastCity(city);
+      citySaved = true;
+    } on AirQualityLocalStoreException catch (error) {
+      if (mounted && requestId == _requestId) {
+        setState(() => _storageWarning = error.message);
+      }
+    }
+    if (!mounted || requestId != _requestId) return;
+
+    try {
+      final air = await _api.fetch(city);
       if (!mounted || requestId != _requestId) return;
       setState(() {
         _air = air;
+        _cacheSavedAt = null;
+        _isCached = false;
         _error = null;
         _isLoading = false;
       });
+      try {
+        await _localStore.saveAirQuality(city, air);
+        if (citySaved && mounted && requestId == _requestId) {
+          setState(() => _storageWarning = null);
+        }
+      } on AirQualityLocalStoreException catch (error) {
+        if (mounted && requestId == _requestId) {
+          setState(() => _storageWarning = error.message);
+        }
+      }
     } on AirQualityApiException catch (error) {
       if (!mounted || requestId != _requestId) return;
       setState(() {
@@ -68,6 +128,8 @@ class _AirQualityHomeState extends State<AirQualityHome> {
     setState(() {
       _city = city;
       _air = null;
+      _isCached = false;
+      _cacheSavedAt = null;
     });
     _loadAirQuality();
   }
@@ -86,6 +148,9 @@ class _AirQualityHomeState extends State<AirQualityHome> {
               air: _air,
               isLoading: _isLoading,
               error: _error,
+              isCached: _isCached,
+              cacheSavedAt: _cacheSavedAt,
+              storageWarning: _storageWarning,
               onRetry: _loadAirQuality,
             )
           : const SizedBox.shrink(),
@@ -184,6 +249,9 @@ class _DashboardPage extends StatelessWidget {
     required this.air,
     required this.isLoading,
     required this.error,
+    required this.isCached,
+    required this.cacheSavedAt,
+    required this.storageWarning,
     required this.onRetry,
   });
 
@@ -191,6 +259,9 @@ class _DashboardPage extends StatelessWidget {
   final AirQuality? air;
   final bool isLoading;
   final String? error;
+  final bool isCached;
+  final DateTime? cacheSavedAt;
+  final String? storageWarning;
   final Future<void> Function({bool showLoading}) onRetry;
 
   @override
@@ -211,10 +282,22 @@ class _DashboardPage extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${city.region} · Data terbaru dari layanan API',
+            '${city.region} · Estimasi kualitas udara dari API',
             style: const TextStyle(color: mutedColor, fontSize: 12),
           ),
-          const SizedBox(height: 17),
+          if (storageWarning != null || isCached) ...[
+            const SizedBox(height: 10),
+            _DataStatusCard(
+              message:
+                  storageWarning ??
+                  (error == null
+                      ? 'Menampilkan data tersimpan'
+                      : 'Pembaruan data gagal: $error'),
+              savedAt: cacheSavedAt,
+              isWarning: storageWarning != null || error != null,
+            ),
+          ],
+          const SizedBox(height: 12),
           if (isLoading && air == null)
             const _LoadingCard()
           else if (error != null && air == null)
@@ -278,14 +361,60 @@ class _DashboardPage extends StatelessWidget {
                 ),
               ],
             ),
+          ] else
+            const _LoadingCard(),
+          const SizedBox(height: 18),
+          CityMapCard(city: city, aqi: air?.usAqi),
+          if (air != null) ...[
             const SizedBox(height: 20),
             _TrendCard(values: air!.hourlyAqi),
             const SizedBox(height: 18),
             _HealthTip(aqi: air!.usAqi),
             const SizedBox(height: 13),
             const SimulationNote(),
-          ] else
-            const _LoadingCard(),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DataStatusCard extends StatelessWidget {
+  const _DataStatusCard({
+    required this.message,
+    required this.savedAt,
+    required this.isWarning,
+  });
+
+  final String message;
+  final DateTime? savedAt;
+  final bool isWarning;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isWarning ? const Color(0xFF9A6412) : const Color(0xFF28745D);
+    final savedTime = savedAt?.toLocal().toString().substring(0, 16);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isWarning ? const Color(0xFFFFF5E3) : const Color(0xFFEAF5EF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isWarning ? Icons.info_outline_rounded : Icons.offline_pin_rounded,
+            color: color,
+            size: 17,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              savedTime == null ? message : '$message · disimpan $savedTime',
+              style: TextStyle(color: color, fontSize: 10, height: 1.4),
+            ),
+          ),
         ],
       ),
     );

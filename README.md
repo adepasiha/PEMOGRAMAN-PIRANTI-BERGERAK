@@ -18,10 +18,13 @@ US AQI, konsentrasi polutan, tren per jam, dan perbandingan kota.
   - **Sulawesi:** Makassar, Manado, Palu.
   - **Papua:** Jayapura, Sorong.
 - Lihat nilai US AQI, PM2.5, PM10, NO₂, dan O₃.
+- Jelajahi peta OpenStreetMap dengan penanda lokasi kota dan nilai AQI.
 - Filter perbandingan kualitas udara berdasarkan pulau dan ketuk kota untuk
   membuka pantauannya.
 - Pilih kota dari menu, tarik layar untuk memuat ulang, dan coba lagi jika API
   tidak dapat diakses.
+- Kota terakhir dan snapshot kualitas udara disimpan di perangkat. Snapshot
+  ditampilkan saat aplikasi dibuka sebelum mencoba mengambil data terbaru dari API.
 - Status memuat dan pesan galat yang informatif.
 
 ## Menjalankan aplikasi
@@ -48,6 +51,7 @@ lib/
     analysis_page.dart
   services/
     air_quality_api.dart
+    air_quality_local_store.dart
   widgets/
     air_quality_widgets.dart
 ```
@@ -55,6 +59,9 @@ lib/
 ## Sumber dan batasan data
 
 Data diperoleh dari [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api).
+Peta menggunakan tile [OpenStreetMap](https://www.openstreetmap.org/copyright)
+dan memerlukan koneksi internet. Penggunaan tile mengikuti
+[kebijakan tile OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/).
 Lisensi data Open-Meteo adalah [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 API menyediakan estimasi kualitas udara berbasis koordinat kota, bukan pembacaan
 langsung dari sensor lokal.
